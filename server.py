@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory
 import json, time, os
 
-app = Flask(__name__, static_folder='../dashboard')
+app = Flask(__name__, static_folder='.')
 
 # Latest data store
 data = {
