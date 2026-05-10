@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OBD-II Live Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #080c10;
+    --panel:    #0d1117;
+    --border:   #1a2535;
+    --accent:   #00e5ff;
+    --green:    #00ff88;
+    --orange:   #ff8c00;
+    --red:      #ff2d55;
+    --dim:      #2a3a4a;
+    --text:     #c8d8e8;
+    --textdim:  #4a6070;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated scanline effect */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,229,255,0.015) 2px,
+      rgba(0,229,255,0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(90deg, #0d1117 0%, #0a1520 100%);
+  }
+
+  .logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--accent);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+
+  .logo span { color: var(--textdim); font-weight: 400; }
+
+  .status-bar {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--textdim);
+  }
+
+  .status-pill .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--dim);
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+
+  .status-pill.on .dot {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+  }
+
+  .status-pill.warn .dot {
+    background: var(--orange);
+    box-shadow: 0 0 8px var(--orange);
+  }
+
+  #last-update {
+    font-size: 11px;
+    color: var(--textdim);
+    letter-spacing: 1px;
+  }
+
+  /* Main grid */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 12px;
+    padding: 16px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.4;
+  }
+
+  .panel-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--textdim);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  /* Big gauge numbers */
+  .big-val {
+    font-family: 'Orbitron', monospace;
+    font-size: 56px;
+    font-weight: 900;
+    line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(0,229,255,0.4);
+    transition: color 0.3s;
+  }
+
+  .big-val.warn { color: var(--orange); text-shadow: 0 0 20px rgba(255,140,0,0.4); }
+  .big-val.danger { color: var(--red); text-shadow: 0 0 20px rgba(255,45,85,0.4); }
+
+  .unit {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    color: var(--textdim);
+    letter-spacing: 2px;
+    margin-top: 4px;
+  }
+
+  /* Arc gauge */
+  .arc-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .arc-svg { overflow: visible; }
+
+  /* Bar gauge */
+  .bar-gauge {
+    margin-top: 8px;
+  }
+
+  .bar-track {
+    height: 6px;
+    background: var(--dim);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--green));
+    transition: width 0.5s ease;
+    box-shadow: 0 0 8px rgba(0,229,255,0.5);
+  }
+
+  .bar-fill.warm { background: linear-gradient(90deg, var(--green), var(--orange)); }
+  .bar-fill.hot  { background: linear-gradient(90deg, var(--orange), var(--red)); box-shadow: 0 0 8px rgba(255,45,85,0.5); }
+
+  .bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--textdim);
+  }
+
+  /* Stats grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  .stat-box {
+    background: rgba(0,229,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 10px 12px;
+  }
+
+  .stat-label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--textdim);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .stat-val {
+    font-family: 'Orbitron', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .stat-unit {
+    font-size: 10px;
+    color: var(--textdim);
+    margin-left: 3px;
+  }
+
+  /* Map panel */
+  .map-panel {
+    grid-column: span 2;
+  }
+
+  #map {
+    width: 100%;
+    height: 280px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: #0a0f14;
+    margin-top: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .map-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--textdim);
+    font-size: 12px;
+    letter-spacing: 2px;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .map-placeholder svg {
+    opacity: 0.3;
+  }
+
+  /* GPS coords */
+  .coords {
+    margin-top: 10px;
+    display: flex;
+    gap: 16px;
+  }
+
+  .coord {
+    font-size: 12px;
+    color: var(--textdim);
+  }
+
+  .coord span {
+    color: var(--green);
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+  }
+
+  /* Crash alert */
+  #crash-alert {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,45,85,0.15);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    animation: crashPulse 0.5s infinite alternate;
+  }
+
+  #crash-alert.active { display: flex; }
+
+  @keyframes crashPulse {
+    from { background: rgba(255,45,85,0.1); }
+    to   { background: rgba(255,45,85,0.3); }
+  }
+
+  .crash-box {
+    background: var(--panel);
+    border: 2px solid var(--red);
+    border-radius: 4px;
+    padding: 40px 60px;
+    text-align: center;
+    box-shadow: 0 0 60px rgba(255,45,85,0.5);
+  }
+
+  .crash-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 32px;
+    font-weight: 900;
+    color: var(--red);
+    letter-spacing: 6px;
+    margin-bottom: 12px;
+  }
+
+  .crash-sub {
+    color: var(--textdim);
+    font-size: 13px;
+    letter-spacing: 2px;
+  }
+
+  /* Offline banner */
+  #offline-banner {
+    display: none;
+    background: rgba(255,140,0,0.1);
+    border-bottom: 1px solid var(--orange);
+    padding: 8px 24px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--orange);
+    text-align: center;
+  }
+
+  #offline-banner.active { display: block; }
+
+  /* RPM arc animation */
+  .rpm-arc {
+    transition: stroke-dashoffset 0.5s ease;
+  }
+
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr 1fr; }
+    .map-panel { grid-column: span 2; }
+  }
+
+  @media (max-width: 600px) {
+    .grid { grid-template-columns: 1fr; }
+    .map-panel { grid-column: span 1; }
+    .big-val { font-size: 40px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="crash-alert">
+  <div class="crash-box">
+    <div class="crash-title">⚠ ACCIDENT DETECTED</div>
+    <div class="crash-sub">EMERGENCY SMS SENT · LOCATION TRANSMITTED</div>
+  </div>
+</div>
+
+<div id="offline-banner">● DEVICE OFFLINE — WAITING FOR DATA...</div>
+
+<header>
+  <div class="logo">OBD<span>-II</span> LIVE</div>
+  <div class="status-bar">
+    <div class="status-pill" id="pill-obd">
+      <div class="dot"></div> OBD
+    </div>
+    <div class="status-pill" id="pill-gsm">
+      <div class="dot"></div> GSM
+    </div>
+    <div class="status-pill" id="pill-gps">
+      <div class="dot"></div> GPS
+    </div>
+    <div id="last-update">--:--:--</div>
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- SPEED -->
+  <div class="panel">
+    <div class="panel-label">Vehicle Speed</div>
+    <div class="arc-wrap">
+      <svg class="arc-svg" width="160" height="100" viewBox="0 0 160 100">
+        <path d="M 10 95 A 70 70 0 0 1 150 95" fill="none" stroke="#1a2535" stroke-width="8" stroke-linecap="round"/>
+        <path id="spd-arc" d="M 10 95 A 70 70 0 0 1 150 95" fill="none" stroke="#00e5ff" stroke-width="8" stroke-linecap="round"
+          stroke-dasharray="220" stroke-dashoffset="220" style="transition: stroke-dashoffset 0.5s ease;"/>
+      </svg>
+      <div style="margin-top:-10px">
+        <div class="big-val" id="spd-val">0</div>
+        <div class="unit">KM/H</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RPM -->
+  <div class="panel">
+    <div class="panel-label">Engine RPM</div>
+    <div class="arc-wrap">
+      <svg class="arc-svg" width="160" height="100" viewBox="0 0 160 100">
+        <path d="M 10 95 A 70 70 0 0 1 150 95" fill="none" stroke="#1a2535" stroke-width="8" stroke-linecap="round"/>
+        <path id="rpm-arc" d="M 10 95 A 70 70 0 0 1 150 95" fill="none" stroke="#00ff88" stroke-width="8" stroke-linecap="round"
+          stroke-dasharray="220" stroke-dashoffset="220" style="transition: stroke-dashoffset 0.5s ease;"/>
+      </svg>
+      <div style="margin-top:-10px">
+        <div class="big-val" id="rpm-val">0</div>
+        <div class="unit">RPM</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATUS -->
+  <div class="panel">
+    <div class="panel-label">System Status</div>
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-label">Coolant</div>
+        <div><span class="stat-val" id="cool-val">--</span><span class="stat-unit">°C</span></div>
+        <div class="bar-gauge" style="margin-top:8px">
+          <div class="bar-track"><div class="bar-fill" id="cool-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Throttle</div>
+        <div><span class="stat-val" id="thr-val">--</span><span class="stat-unit">%</span></div>
+        <div class="bar-gauge" style="margin-top:8px">
+          <div class="bar-track"><div class="bar-fill" id="thr-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Battery</div>
+        <div><span class="stat-val" id="vbat-val">--</span><span class="stat-unit">V</span></div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Signal</div>
+        <div><span class="stat-val" id="gsm-val">--</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div class="panel map-panel">
+    <div class="panel-label">GPS Location</div>
+    <div id="map">
+      <div class="map-placeholder" id="map-placeholder">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4a6070" stroke-width="1.5">
+          <circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+        </svg>
+        WAITING FOR GPS FIX...
+      </div>
+      <iframe id="map-frame" style="display:none;width:100%;height:100%;border:none;" allowfullscreen></iframe>
+    </div>
+    <div class="coords">
+      <div class="coord">LAT <span id="lat-val">--</span></div>
+      <div class="coord">LON <span id="lon-val">--</span></div>
+      <div class="coord" id="maps-link-wrap" style="display:none">
+        <a id="maps-link" href="#" target="_blank" style="color:var(--accent);text-decoration:none;font-size:11px;letter-spacing:1px">↗ OPEN IN MAPS</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const SERVER = '';  // empty = same origin; set to 'http://your-server.com' if needed
+
+  let lastTimestamp = 0;
+  let offlineTimer = null;
+
+  function setArc(id, pct) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const total = 220;
+    el.style.strokeDashoffset = total - (total * Math.min(pct, 1));
+  }
+
+  function update(d) {
+    // Speed
+    document.getElementById('spd-val').textContent = d.spd ?? '--';
+    setArc('spd-arc', (d.spd || 0) / 180);
+
+    // RPM
+    const rpmEl = document.getElementById('rpm-val');
+    rpmEl.textContent = d.rpm ?? '--';
+    const rpmPct = (d.rpm || 0) / 7000;
+    setArc('rpm-arc', rpmPct);
+    rpmEl.className = 'big-val' + (rpmPct > 0.85 ? ' danger' : rpmPct > 0.7 ? ' warn' : '');
+
+    // Coolant
+    const cool = d.cool || 0;
+    document.getElementById('cool-val').textContent = d.cool ?? '--';
+    const coolBar = document.getElementById('cool-bar');
+    const coolPct = Math.min(((cool + 40) / 160) * 100, 100);
+    coolBar.style.width = coolPct + '%';
+    coolBar.className = 'bar-fill' + (cool > 110 ? ' hot' : cool > 90 ? ' warm' : '');
+
+    // Throttle
+    document.getElementById('thr-val').textContent = d.thr ?? '--';
+    document.getElementById('thr-bar').style.width = (d.thr || 0) + '%';
+
+    // Battery
+    document.getElementById('vbat-val').textContent = d.vbat ? d.vbat.toFixed(1) : '--';
+
+    // GSM
+    document.getElementById('gsm-val').textContent = d.gsm_ready ? 'READY' : 'OFF';
+
+    // Status pills
+    setPill('pill-obd', d.obd_ready);
+    setPill('pill-gsm', d.gsm_ready);
+    setPill('pill-gps', d.gps_valid);
+
+    // GPS
+    if (d.gps_valid && d.lat && d.lon) {
+      document.getElementById('lat-val').textContent = d.lat.toFixed(5);
+      document.getElementById('lon-val').textContent = d.lon.toFixed(5);
+      document.getElementById('map-placeholder').style.display = 'none';
+      const frame = document.getElementById('map-frame');
+      frame.style.display = 'block';
+      // Update map every 10 seconds to avoid rate limiting
+      if (!frame._lastUpdate || Date.now() - frame._lastUpdate > 10000) {
+        frame.src = `https://maps.google.com/maps?q=${d.lat},${d.lon}&z=15&output=embed`;
+        frame._lastUpdate = Date.now();
+      }
+      const link = document.getElementById('maps-link');
+      link.href = `https://maps.google.com/maps?q=${d.lat},${d.lon}`;
+      document.getElementById('maps-link-wrap').style.display = 'block';
+    }
+
+    // Timestamp
+    const now = new Date();
+    document.getElementById('last-update').textContent =
+      now.toTimeString().slice(0,8);
+
+    // Crash alert
+    if (d.crash) {
+      document.getElementById('crash-alert').classList.add('active');
+      setTimeout(() => document.getElementById('crash-alert').classList.remove('active'), 10000);
+    }
+
+    // Offline detection — if no update in 15s
+    document.getElementById('offline-banner').classList.remove('active');
+    clearTimeout(offlineTimer);
+    offlineTimer = setTimeout(() => {
+      document.getElementById('offline-banner').classList.add('active');
+    }, 15000);
+  }
+
+  function setPill(id, on) {
+    const el = document.getElementById(id);
+    el.className = 'status-pill' + (on ? ' on' : '');
+  }
+
+  async function poll() {
+    try {
+      const res = await fetch(SERVER + '/data');
+      if (res.ok) {
+        const d = await res.json();
+        if (d.timestamp !== lastTimestamp) {
+          lastTimestamp = d.timestamp;
+          update(d);
+        }
+      }
+    } catch(e) {
+      // server unreachable
+    }
+    setTimeout(poll, 2000);
+  }
+
+  poll();
+</script>
+</body>
+</html>
