@@ -6,7 +6,7 @@
 // ============================================================
 
 #define GPRS_APN        "internet"        // Vivacom APN
-#define SERVER_HOST     "YOUR_SERVER_URL" // e.g. mycarapp.railway.app
+#define SERVER_HOST     "cardash-production-dbb8.up.railway.app"
 #define SERVER_PORT     80
 #define GPRS_INTERVAL   3000              // send data every 3 seconds
 
