@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 import json, time, os
 
 app = Flask(__name__)
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app)
 
 # Latest data store
 data = {
